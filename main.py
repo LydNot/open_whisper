@@ -3,6 +3,8 @@ import uvicorn
 import time
 import rumps
 import webbrowser
+import os
+import sys
 from backend.app import app as fastapi_app, service
 
 def start_server():
@@ -15,16 +17,18 @@ class OpenWhisperApp(rumps.App):
 
         self.server_thread = None
         self.window_opened = False
+        self.is_recording = False
 
         # Menu items
         self.menu = [
             rumps.MenuItem("Open Window", callback=self.open_window),
             rumps.separator,
+            rumps.MenuItem("Toggle Recording (F9)", callback=None),
             rumps.MenuItem("Paste Transcripts (⌘⇧V)", callback=self.paste_transcripts),
             rumps.separator,
             rumps.MenuItem("Quit Open Whisper", callback=self.quit_app)
         ]
-
+    
     def start_backend(self):
         """Start FastAPI server in background thread"""
         self.server_thread = threading.Thread(target=start_server, daemon=True)
@@ -56,7 +60,39 @@ class OpenWhisperApp(rumps.App):
         """Quit the application"""
         rumps.quit_application()
 
+def check_single_instance():
+    """Ensure only one instance of Open Whisper is running"""
+    pid_file = os.path.expanduser('~/.open_whisper.pid')
+    
+    # Check if PID file exists
+    if os.path.exists(pid_file):
+        try:
+            with open(pid_file, 'r') as f:
+                old_pid = int(f.read().strip())
+            
+            # Check if process is still running
+            try:
+                os.kill(old_pid, 0)  # Signal 0 just checks if process exists
+                print(f"Open Whisper is already running (PID: {old_pid})")
+                print("Opening window...")
+                webbrowser.open('http://localhost:8000')
+                sys.exit(0)
+            except OSError:
+                # Process is not running, remove stale PID file
+                os.remove(pid_file)
+        except (ValueError, FileNotFoundError):
+            pass
+    
+    # Write current PID
+    with open(pid_file, 'w') as f:
+        f.write(str(os.getpid()))
+    
+    # Register cleanup on exit
+    import atexit
+    atexit.register(lambda: os.path.exists(pid_file) and os.remove(pid_file))
+
 if __name__ == '__main__':
+    check_single_instance()
     app = OpenWhisperApp()
     app.start_backend()
     app.run()

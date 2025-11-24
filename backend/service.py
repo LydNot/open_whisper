@@ -24,16 +24,17 @@ from whisper_ctranslate2.transcribe import Transcribe, TranscriptionOptions
 from .config import load_config
 
 # Constants from live.py
-BlockSize = 30
+BlockSize = 30  # milliseconds per block
 Vocals = [50, 1000]
 # EndBlocks is now dynamic based on config
-FlushBlocks = 33 * 10
+# FlushBlocks is now calculated dynamically from max_chunk_duration_s config
 
 class TranscriptionService:
     def __init__(self):
         self.config = load_config()
         self.running = False
         self.listening = False # Default to not recording
+        self.manual_recording = False # Track if manually recording (F9 mode)
         self.queue = queue.Queue() # WebSocket queue (high priority: text, status)
         self.volume_queue = queue.Queue(maxsize=5) # Low priority: volume updates (drop if full)
         self.audio_queue = queue.Queue() # Audio buffer queue
@@ -88,7 +89,7 @@ class TranscriptionService:
             self.hotkey_listener.stop()
 
     def _start_hotkey_listener(self):
-        """Start global hotkey listener for Cmd+Shift+V and Cmd+Shift+R"""
+        """Start global hotkey listener for Cmd+Shift+V, Cmd+R, and F9"""
         def on_paste():
             """Paste transcripts when hotkey is pressed"""
             if self.transcripts:
@@ -101,14 +102,30 @@ class TranscriptionService:
         def on_toggle_recording():
             """Toggle recording when hotkey is pressed"""
             self.listening = not self.listening
+            self.manual_recording = self.listening  # Track manual recording mode
+            
             status = "Recording started" if self.listening else "Recording stopped"
-            print(f"[Hotkey] {status}")
-
-            # If stopping, copy current transcript to clipboard
-            if not self.listening and self.transcripts:
-                text = '\n'.join(self.transcripts)
-                pyperclip.copy(text)
-                print(f"[Hotkey] Copied {len(self.transcripts)} transcript(s) to clipboard")
+            print(f"[Hotkey] {status} (Manual mode)")
+            
+            # Show macOS notification
+            import subprocess
+            if self.listening:
+                # Clear buffer when starting manual recording
+                self.buffer = np.zeros((0, 1))
+                subprocess.run([
+                    'osascript', '-e',
+                    'display notification "Press Cmd+R or F9 to stop" with title "🎤 Recording Started" sound name "Tink"'
+                ])
+            else:
+                # Process the entire recording when stopping
+                if len(self.buffer) > 0:
+                    self._save_to_process()
+                
+                subtitle = f"Processing recording..." if len(self.buffer) > 0 else "No audio recorded"
+                subprocess.run([
+                    'osascript', '-e',
+                    f'display notification "{subtitle}" with title "⏹️ Recording Stopped" sound name "Tink"'
+                ])
 
         # Create hotkeys
         paste_hotkey = keyboard.HotKey(
@@ -116,27 +133,34 @@ class TranscriptionService:
             on_paste
         )
 
-        record_hotkey = keyboard.HotKey(
-            keyboard.HotKey.parse('<cmd>+<shift>+r'),
+        record_hotkey_cmdr = keyboard.HotKey(
+            keyboard.HotKey.parse('<cmd>+r'),
             on_toggle_recording
         )
 
-        def for_canonical(paste_fn, record_fn):
+        record_hotkey_f9 = keyboard.HotKey(
+            keyboard.HotKey.parse('<f9>'),
+            on_toggle_recording
+        )
+
+        def for_canonical(paste_fn, record_cmdr_fn, record_f9_fn):
             def handler(key):
                 paste_fn(key)
-                record_fn(key)
+                record_cmdr_fn(key)
+                record_f9_fn(key)
             return handler
 
         hotkey_listener = keyboard.Listener(
-            on_press=for_canonical(paste_hotkey.press, record_hotkey.press),
-            on_release=for_canonical(paste_hotkey.release, record_hotkey.release)
+            on_press=for_canonical(paste_hotkey.press, record_hotkey_cmdr.press, record_hotkey_f9.press),
+            on_release=for_canonical(paste_hotkey.release, record_hotkey_cmdr.release, record_hotkey_f9.release)
         )
 
         hotkey_listener.start()
         self.hotkey_listener = hotkey_listener
         print("Global hotkeys registered:")
         print("  Cmd+Shift+V - Paste transcripts")
-        print("  Cmd+Shift+R - Toggle recording (auto-copies on stop)")
+        print("  Cmd+R - Toggle recording (auto-copies on stop)")
+        print("  F9 - Toggle recording (auto-copies on stop)")
             
     def _is_there_voice(self, indata, frames, sample_rate):
         freq = (
@@ -184,6 +208,13 @@ class TranscriptionService:
         except queue.Full:
             pass  # Drop volume update if queue is full
 
+        # Manual recording mode: accumulate all audio without VAD chunking
+        if self.manual_recording:
+            self.buffer = np.concatenate((self.buffer, indata))
+            self.prevblock = indata  # Keep track of previous block
+            return  # Don't process until user manually stops
+
+        # Automatic VAD mode (original behavior)
         voice = self._is_there_voice(indata, frames, sample_rate)
 
         if not voice and not self.speaking:
@@ -200,7 +231,9 @@ class TranscriptionService:
             self.waiting = int(silence_ms / BlockSize)
 
             if not self.speaking:
-                self.blocks_speaking = FlushBlocks
+                # Calculate FlushBlocks dynamically from config
+                max_chunk_s = self.config.get("max_chunk_duration_s", 10)
+                self.blocks_speaking = int((max_chunk_s * 1000) / BlockSize)
 
             self.speaking = True
         else:
@@ -299,12 +332,23 @@ class TranscriptionService:
             
             if not self.transcribe_model:
                 # Initialize model
+                # Auto-detect optimal thread count if not specified
+                threads = self.config.get("threads", 0)
+                if threads == 0:
+                    threads = os.cpu_count() or 4  # Fallback to 4 if detection fails
+                
+                compute_type = self.config.get("compute_type", "int8")
+                
+                print(f"Initializing Whisper model: {self.config.get('model', 'turbo')}")
+                print(f"  Threads: {threads}")
+                print(f"  Compute type: {compute_type}")
+                
                 self.transcribe_model = Transcribe(
                     model_path=self.config.get("model", "turbo"),
                     device="auto",
                     device_index=0,
-                    compute_type="int8",
-                    threads=4,
+                    compute_type=compute_type,
+                    threads=threads,
                     cache_directory=None,
                     local_files_only=False,
                     batched=False

@@ -17,12 +17,15 @@
             <div style="display: flex; align-items: center; gap: 10px;">
                 <h1>Open Whisper</h1>
                 <div id="status" style="color: #888; font-size: 0.9rem;">Paused</div>
+                <div id="autosave-indicator" style="color: #44ff44; font-size: 0.8rem; opacity: 0; transition: opacity 0.3s;">
+                    ✓ Auto-saved
+                </div>
             </div>
             <div id="queue-status"
                 style="color: #888; font-size: 0.9rem; display: none; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,0.1);">
                 Queue: 0</div>
             <div class="controls">
-                <button id="mic-btn" title="Stop Listening">
+                <button id="mic-btn" title="Stop Listening (⌘R or ⌘Space)">
                     <i data-lucide="mic"></i>
                 </button>
                 <button id="copy-btn" title="Copy All">
@@ -111,6 +114,13 @@
             <div id="settings-panel" class="settings-panel" style="display: none;">
                 <h2>Settings</h2>
                 <div class="setting-item">
+                    <label>
+                        <input id="autosave-toggle" type="checkbox" checked>
+                        Auto-save transcripts
+                    </label>
+                    <small style="color: #888;">Automatically save transcripts as they arrive</small>
+                </div>
+                <div class="setting-item">
                     <label>Model</label>
                     <select id="model-select">
                         <option value="tiny">Tiny</option>
@@ -132,6 +142,11 @@
                 <div class="setting-item">
                     <label>Silence Duration (ms)</label>
                     <input id="silence-input" type="number" step="100">
+                </div>
+                <div class="setting-item">
+                    <label>Max Chunk Duration (seconds)</label>
+                    <input id="max-chunk-input" type="number" step="5" min="5" max="300">
+                    <small style="color: #888;">Maximum audio length before forcing transcription (default: 10s)</small>
                 </div>
             </div>
         </main>

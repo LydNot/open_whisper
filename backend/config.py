@@ -13,7 +13,10 @@ DEFAULT_CONFIG = {
     "vad_min_silence_duration_ms": 900,
     "vad_max_speech_duration_s": 30,
     "live_transcribe": True,
-    "silence_duration_ms": 1000
+    "silence_duration_ms": 1000,
+    "max_chunk_duration_s": 10,  # Maximum duration before forcing transcription
+    "threads": 0,  # 0 = auto-detect optimal thread count based on CPU
+    "compute_type": "int8"  # int8 for speed, float16/float32 for higher accuracy (requires more resources)
 }
 
 def load_config() -> Dict[str, Any]:

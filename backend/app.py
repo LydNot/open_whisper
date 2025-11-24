@@ -45,6 +45,16 @@ async def paste_to_cursor(request: PasteRequest):
 @app.post("/toggle_listening")
 async def toggle_listening():
     service.listening = not service.listening
+    service.manual_recording = service.listening  # Enable manual mode for web UI too
+    
+    if service.listening:
+        # Clear buffer when starting manual recording
+        service.buffer = np.zeros((0, 1))
+    else:
+        # Process the entire recording when stopping
+        if len(service.buffer) > 0:
+            service._save_to_process()
+    
     return {"listening": service.listening}
 
 class SaveRequest(BaseModel):
@@ -127,12 +137,21 @@ async def transcribe_file(file: UploadFile = File(...)):
         # Use the transcription model to transcribe the file
         if not service.transcribe_model:
             from whisper_ctranslate2.transcribe import Transcribe, TranscriptionOptions
+            
+            # Auto-detect optimal thread count if not specified
+            threads = service.config.get("threads", 0)
+            if threads == 0:
+                import os
+                threads = os.cpu_count() or 4  # Fallback to 4 if detection fails
+            
+            compute_type = service.config.get("compute_type", "int8")
+            
             service.transcribe_model = Transcribe(
                 model_path=service.config.get("model", "turbo"),
                 device="auto",
                 device_index=0,
-                compute_type="int8",
-                threads=4,
+                compute_type=compute_type,
+                threads=threads,
                 cache_directory=None,
                 local_files_only=False,
                 batched=False

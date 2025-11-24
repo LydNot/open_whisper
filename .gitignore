@@ -161,3 +161,7 @@ cython_debug/
 transcripts/
 transcript-*.jsonl
 config.json
+logs/
+*.log
+.DS_Store
+python3-wrapper.app/

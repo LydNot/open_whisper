@@ -5,6 +5,8 @@ let transcripts = [];
 let isListening = false; // Default to false
 let config = {};
 let ws = null;
+let autoSaveEnabled = true; // Auto-save by default
+let currentSessionFile = null; // Track current session file
 
 // Initialize Lucide icons
 lucide.createIcons();
@@ -23,6 +25,8 @@ const languageInput = document.getElementById('language-input');
 const volumeInput = document.getElementById('volume-input');
 const statusIndicator = document.getElementById('status');
 const queueStatusIndicator = document.getElementById('queue-status');
+const autoSaveToggle = document.getElementById('autosave-toggle');
+const maxChunkInput = document.getElementById('max-chunk-input');
 
 updateStatus();
 
@@ -42,6 +46,97 @@ volumeInput.addEventListener('change', (e) => {
 });
 const silenceInput = document.getElementById('silence-input');
 silenceInput.addEventListener('change', (e) => updateConfig('silence_duration_ms', parseInt(e.target.value)));
+maxChunkInput.addEventListener('change', (e) => updateConfig('max_chunk_duration_s', parseInt(e.target.value)));
+autoSaveToggle.addEventListener('change', (e) => {
+    autoSaveEnabled = e.target.checked;
+    console.log('Auto-save:', autoSaveEnabled ? 'enabled' : 'disabled');
+});
+
+// Keyboard hotkey listener
+window.addEventListener('keydown', (e) => {
+    // Ctrl+R (or Cmd+R on Mac) to toggle recording
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const modifierKey = isMac ? e.metaKey : e.ctrlKey;
+    
+    if (e.key === 'r' && modifierKey) {
+        e.preventDefault(); // Prevent browser reload
+        showHotkeyFeedback(isMac ? '⌘R' : 'Ctrl+R');
+        toggleListening();
+        return;
+    }
+    
+    // Ctrl+Space (or Cmd+Space) as alternative - more reliable than F9
+    if (e.key === ' ' && modifierKey) {
+        e.preventDefault();
+        showHotkeyFeedback(isMac ? '⌘Space' : 'Ctrl+Space');
+        toggleListening();
+        return;
+    }
+    
+    // Try to catch F9 with multiple key checks (F9 can be tricky)
+    if (e.key === 'F9' || e.keyCode === 120 || e.code === 'F9') {
+        e.preventDefault();
+        showHotkeyFeedback('F9');
+        toggleListening();
+        return;
+    }
+});
+
+// Show visual feedback when hotkey is pressed
+function showHotkeyFeedback(keyName = 'Hotkey') {
+    // Pulse the microphone button
+    micBtn.style.transform = 'scale(1.2)';
+    micBtn.style.transition = 'transform 0.1s ease-out';
+    
+    setTimeout(() => {
+        micBtn.style.transform = 'scale(1)';
+    }, 150);
+    
+    // Show toast notification
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const displayKey = keyName === 'Cmd+R (Cmd+R)' || keyName === 'Cmd+R (Ctrl+R)' 
+        ? (isMac ? '⌘R' : 'Ctrl+R')
+        : keyName;
+    showToast(`${displayKey} pressed`);
+}
+
+// Toast notification function
+function showToast(message) {
+    // Remove existing toast if any
+    const existingToast = document.getElementById('hotkey-toast');
+    if (existingToast) {
+        existingToast.remove();
+    }
+    
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.id = 'hotkey-toast';
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(100, 108, 255, 0.95);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        z-index: 10000;
+        animation: toastFadeIn 0.2s ease-out;
+        pointer-events: none;
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Remove after 1 second
+    setTimeout(() => {
+        toast.style.animation = 'toastFadeOut 0.2s ease-out';
+        setTimeout(() => toast.remove(), 200);
+    }, 1000);
+}
 
 // Initialization
 fetchConfig();
@@ -66,6 +161,7 @@ function renderConfig() {
         updateThresholdMarker(config.live_volume_threshold);
     }
     if (config.silence_duration_ms) silenceInput.value = config.silence_duration_ms;
+    if (config.max_chunk_duration_s) maxChunkInput.value = config.max_chunk_duration_s;
 }
 
 function updateThresholdMarker(threshold) {
@@ -105,7 +201,9 @@ function connectWebSocket() {
 
 function addTranscript(text) {
     const timestamp = new Date();
-    const transcript = { text, timestamp };
+    // Store timestamp in local timezone ISO format instead of UTC
+    const localTimestamp = new Date(timestamp.getTime() - (timestamp.getTimezoneOffset() * 60000)).toISOString();
+    const transcript = { text, timestamp: localTimestamp };
     transcripts.push(transcript);
 
     const item = document.createElement('div');
@@ -116,6 +214,11 @@ function addTranscript(text) {
     `;
     transcriptView.appendChild(item);
     item.scrollIntoView({ behavior: 'smooth' });
+
+    // Auto-save if enabled - save only this new transcript to its own file
+    if (autoSaveEnabled) {
+        autoSaveTranscript(transcript);
+    }
 }
 
 async function toggleListening() {
@@ -133,7 +236,9 @@ async function toggleListening() {
 function updateMicButton() {
     const icon = isListening ? 'mic' : 'mic-off';
     micBtn.innerHTML = `<i data-lucide="${icon}"></i>`;
-    micBtn.title = isListening ? "Stop Listening" : "Start Listening";
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const hotkey = isMac ? '⌘R or ⌘Space' : 'Ctrl+R or Ctrl+Space';
+    micBtn.title = isListening ? `Stop Recording (${hotkey})` : `Start Recording (${hotkey})`;
     micBtn.style.color = isListening ? '#ff4444' : 'inherit'; // Red when recording
     lucide.createIcons();
 }
@@ -201,6 +306,7 @@ async function saveTranscript() {
             body: JSON.stringify({ transcripts })
         });
         const data = await response.json();
+        currentSessionFile = data.path; // Remember the current file
         alert(`Transcript saved to:\n${data.path}`);
     } catch (error) {
         console.error('Failed to save transcript', error);
@@ -208,9 +314,38 @@ async function saveTranscript() {
     }
 }
 
+async function autoSaveTranscript(transcript) {
+    try {
+        // Save only this single transcript to its own file
+        const response = await fetch(`${API_URL}/save_transcript`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transcripts: [transcript] })
+        });
+        const data = await response.json();
+        console.log('Auto-saved to:', data.path);
+        
+        // Show a subtle indicator that auto-save happened
+        showAutoSaveIndicator();
+    } catch (error) {
+        console.error('Auto-save failed:', error);
+    }
+}
+
+function showAutoSaveIndicator() {
+    const indicator = document.getElementById('autosave-indicator');
+    if (indicator) {
+        indicator.style.opacity = '1';
+        setTimeout(() => {
+            indicator.style.opacity = '0';
+        }, 1500);
+    }
+}
+
 function clearTranscripts() {
     transcripts = [];
     transcriptView.innerHTML = '';
+    currentSessionFile = null; // Reset session - next save will create a new file
 }
 
 function toggleSettings() {
