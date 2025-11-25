@@ -57,83 +57,9 @@ autoPasteToggle.addEventListener('change', (e) => {
     console.log('Auto-paste:', e.target.checked ? 'enabled' : 'disabled');
 });
 
-// Keyboard hotkey listener
-window.addEventListener('keydown', (e) => {
-    // Ctrl+R (or Cmd+R on Mac) to toggle recording
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const modifierKey = isMac ? e.metaKey : e.ctrlKey;
-    
-    if (e.key === 'r' && modifierKey) {
-        e.preventDefault(); // Prevent browser reload
-        showHotkeyFeedback(isMac ? '⌘R' : 'Ctrl+R');
-        toggleListening();
-        return;
-    }
-    
-    // Cmd+Shift+R (or Ctrl+Shift+R) as alternative to Cmd+R
-    if (e.key === 'r' && modifierKey && e.shiftKey) {
-        e.preventDefault();
-        showHotkeyFeedback(isMac ? '⌘⇧R' : 'Ctrl+Shift+R');
-        toggleListening();
-        return;
-    }
-});
-
-// Show visual feedback when hotkey is pressed
-function showHotkeyFeedback(keyName = 'Hotkey') {
-    // Pulse the microphone button
-    micBtn.style.transform = 'scale(1.2)';
-    micBtn.style.transition = 'transform 0.1s ease-out';
-    
-    setTimeout(() => {
-        micBtn.style.transform = 'scale(1)';
-    }, 150);
-    
-    // Show toast notification
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const displayKey = keyName === 'Cmd+R (Cmd+R)' || keyName === 'Cmd+R (Ctrl+R)' 
-        ? (isMac ? '⌘R' : 'Ctrl+R')
-        : keyName;
-    showToast(`${displayKey} pressed`);
-}
-
-// Toast notification function
-function showToast(message) {
-    // Remove existing toast if any
-    const existingToast = document.getElementById('hotkey-toast');
-    if (existingToast) {
-        existingToast.remove();
-    }
-    
-    // Create toast element
-    const toast = document.createElement('div');
-    toast.id = 'hotkey-toast';
-    toast.textContent = message;
-    toast.style.cssText = `
-        position: fixed;
-        bottom: 30px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(100, 108, 255, 0.95);
-        color: white;
-        padding: 12px 24px;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 500;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        z-index: 10000;
-        animation: toastFadeIn 0.2s ease-out;
-        pointer-events: none;
-    `;
-    
-    document.body.appendChild(toast);
-    
-    // Remove after 1 second
-    setTimeout(() => {
-        toast.style.animation = 'toastFadeOut 0.2s ease-out';
-        setTimeout(() => toast.remove(), 200);
-    }, 1000);
-}
+// Note: Keyboard hotkeys are now handled by the backend (pynput) for global support
+// This means Cmd+R, Cmd+Shift+R, and Cmd+Shift+V work even when app is not focused
+// The frontend no longer needs to handle these keys
 
 // Initialization
 fetchConfig();
