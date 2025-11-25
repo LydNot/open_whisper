@@ -168,26 +168,28 @@ class TranscriptionService:
             on_paste
         )
 
-        record_hotkey_cmdr = keyboard.HotKey(
-            keyboard.HotKey.parse('<cmd>+r'),
-            on_toggle_recording
-        )
-
+        # Note: Order matters - check more specific combo first
         record_hotkey_cmd_shift_r = keyboard.HotKey(
             keyboard.HotKey.parse('<cmd>+<shift>+r'),
-            on_toggle_recording
+            lambda: (print("[Hotkey] Cmd+Shift+R detected"), on_toggle_recording())
+        )
+        
+        record_hotkey_cmdr = keyboard.HotKey(
+            keyboard.HotKey.parse('<cmd>+r'),
+            lambda: (print("[Hotkey] Cmd+R detected"), on_toggle_recording())
         )
 
-        def for_canonical(paste_fn, record_cmdr_fn, record_cmd_shift_r_fn):
+        def for_canonical(paste_fn, record_cmd_shift_r_fn, record_cmdr_fn):
             def handler(key):
                 paste_fn(key)
-                record_cmdr_fn(key)
+                # Check more specific combo first (Cmd+Shift+R before Cmd+R)
                 record_cmd_shift_r_fn(key)
+                record_cmdr_fn(key)
             return handler
 
         hotkey_listener = keyboard.Listener(
-            on_press=for_canonical(paste_hotkey.press, record_hotkey_cmdr.press, record_hotkey_cmd_shift_r.press),
-            on_release=for_canonical(paste_hotkey.release, record_hotkey_cmdr.release, record_hotkey_cmd_shift_r.release)
+            on_press=for_canonical(paste_hotkey.press, record_hotkey_cmd_shift_r.press, record_hotkey_cmdr.press),
+            on_release=for_canonical(paste_hotkey.release, record_hotkey_cmd_shift_r.release, record_hotkey_cmdr.release)
         )
 
         try:
