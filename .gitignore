@@ -19,6 +19,9 @@ ENV/
 *.swo
 *~
 
+# Project-specific files
+AGENTS.md
+
 # macOS
 .DS_Store
 .AppleDouble
