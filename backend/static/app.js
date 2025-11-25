@@ -139,6 +139,15 @@ function showToast(message) {
 fetchConfig();
 connectWebSocket();
 updateMicButton(); // Set initial button state
+loadRecentTranscripts(); // Load recent transcripts on startup
+
+// Load recent transcript files from the transcripts folder
+async function loadRecentTranscripts() {
+    // Note: Due to browser security, we can't directly read filesystem
+    // For now, transcripts only persist during the current session
+    // Future: Add API endpoint to fetch recent transcript files
+    console.log('Transcript history available in transcripts/ folder');
+}
 
 async function fetchConfig() {
     try {
@@ -172,9 +181,15 @@ function updateThresholdMarker(threshold) {
 
 function connectWebSocket() {
     ws = new WebSocket(WS_URL);
+    ws.onopen = () => {
+        console.log('WebSocket connected');
+    };
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        console.log('WebSocket received:', data);
+        
         if (data.text) {
+            console.log('Adding transcript:', data.text);
             addTranscript(data.text);
             updateStatus("Transcribing...");
             setTimeout(() => updateStatus(), 2000); // Reset status after 2s
@@ -192,7 +207,11 @@ function connectWebSocket() {
             updateQueueSidebar(data.queue_details);
         }
     };
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+    };
     ws.onclose = () => {
+        console.log('WebSocket closed, reconnecting...');
         setTimeout(connectWebSocket, 1000);
     };
 }

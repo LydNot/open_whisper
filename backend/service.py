@@ -113,40 +113,46 @@ class TranscriptionService:
         """Start global hotkey listener for Cmd+Shift+V, Cmd+R, and Cmd+Shift+R."""
         def on_paste():
             """Paste transcripts when hotkey is pressed"""
-            if self.transcripts:
-                text = '\n'.join(self.transcripts)
-                pyperclip.copy(text)
-                time.sleep(0.1)
-                # Cmd+V on macOS
-                pyautogui.hotkey('command', 'v')
+            try:
+                if self.transcripts:
+                    text = '\n'.join(self.transcripts)
+                    pyperclip.copy(text)
+                    time.sleep(CLIPBOARD_DELAY)
+                    # Cmd+V on macOS
+                    pyautogui.hotkey('command', 'v')
+            except Exception as e:
+                print(f"[Hotkey Error] Paste failed: {e}")
 
         def on_toggle_recording():
             """Toggle recording when hotkey is pressed"""
-            self.listening = not self.listening
-            self.manual_recording = self.listening  # Track manual recording mode
-            
-            status = "Recording started" if self.listening else "Recording stopped"
-            print(f"[Hotkey] {status} (Manual mode)")
-            
-            # Show macOS notification
-            import subprocess
-            if self.listening:
-                # Clear buffer when starting manual recording
-                self.buffer = np.zeros((0, 1))
-                subprocess.run([
-                    'osascript', '-e',
-                    'display notification "Press Cmd+R or Cmd+Shift+R to stop" with title "🎤 Recording Started" sound name "Tink"'
-                ])
-            else:
-                # Process the entire recording when stopping
-                if len(self.buffer) > 0:
-                    self._save_to_process()
+            try:
+                self.listening = not self.listening
+                self.manual_recording = self.listening  # Track manual recording mode
                 
-                subtitle = f"Processing recording..." if len(self.buffer) > 0 else "No audio recorded"
-                subprocess.run([
-                    'osascript', '-e',
-                    f'display notification "{subtitle}" with title "⏹️ Recording Stopped" sound name "Tink"'
-                ])
+                status = "Recording started" if self.listening else "Recording stopped"
+                print(f"[Hotkey] {status} (Manual mode)")
+                
+                # Show macOS notification
+                import subprocess
+                if self.listening:
+                    # Clear buffer when starting manual recording
+                    self.buffer = np.zeros((0, 1))
+                    subprocess.run([
+                        'osascript', '-e',
+                        'display notification "Press Cmd+R or Cmd+Shift+R to stop" with title "🎤 Recording Started" sound name "Tink"'
+                    ])
+                else:
+                    # Process the entire recording when stopping
+                    if len(self.buffer) > 0:
+                        self._save_to_process()
+                    
+                    subtitle = f"Processing recording..." if len(self.buffer) > 0 else "No audio recorded"
+                    subprocess.run([
+                        'osascript', '-e',
+                        f'display notification "{subtitle}" with title "⏹️ Recording Stopped" sound name "Tink"'
+                    ])
+            except Exception as e:
+                print(f"[Hotkey Error] Toggle recording failed: {e}")
 
         # Create hotkeys
         paste_hotkey = keyboard.HotKey(
@@ -176,12 +182,17 @@ class TranscriptionService:
             on_release=for_canonical(paste_hotkey.release, record_hotkey_cmdr.release, record_hotkey_cmd_shift_r.release)
         )
 
-        hotkey_listener.start()
-        self.hotkey_listener = hotkey_listener
-        print("Global hotkeys registered:")
-        print("  Cmd+Shift+V - Paste transcripts")
-        print("  Cmd+R - Toggle recording (auto-copies on stop)")
-        print("  Cmd+Shift+R - Toggle recording (auto-copies on stop)")
+        try:
+            hotkey_listener.start()
+            self.hotkey_listener = hotkey_listener
+            print("✅ Global hotkeys registered:")
+            print("  Cmd+Shift+V - Paste transcripts")
+            print("  Cmd+R - Toggle recording (auto-copies on stop)")
+            print("  Cmd+Shift+R - Toggle recording (auto-copies on stop)")
+        except Exception as e:
+            print(f"❌ Failed to start hotkey listener: {e}")
+            print("   Hotkeys will not work. Check Accessibility permissions.")
+            print("   See ACCESSIBILITY.md for setup instructions.")
             
     def _is_there_voice(self, indata: np.ndarray, frames: int, sample_rate: int) -> bool:
         """
@@ -492,6 +503,8 @@ class TranscriptionService:
 
                 if result['text'].strip():
                     text = result['text'].strip()
+                    print(f"[Transcription] Completed: {text[:50]}{'...' if len(text) > 50 else ''}")
+                    print(f"[WebSocket] Sending text to UI queue")
                     self.queue.put({"text": text})
                     # Add to transcripts for hotkey paste
                     self.transcripts.append(text)
