@@ -134,9 +134,11 @@ class TranscriptionService:
                 
                 # Send status update to UI via WebSocket
                 if self.listening:
-                    self.queue.put({"status": "Listening...", "listening": True})
+                    print(f"[WebSocket] Sending listening state: True")
+                    self.queue.put({"listening": True, "status": "Listening..."})
                 else:
-                    self.queue.put({"status": "Processing...", "listening": False})
+                    print(f"[WebSocket] Sending listening state: False")
+                    self.queue.put({"listening": False, "status": "Processing..."})
                 
                 # Show macOS notification
                 import subprocess

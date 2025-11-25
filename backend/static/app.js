@@ -127,9 +127,12 @@ function connectWebSocket() {
         
         // Handle listening state changes from hotkey
         if (data.listening !== undefined) {
+            console.log('Updating listening state from backend:', data.listening);
             isListening = data.listening;
+            console.log('isListening is now:', isListening);
             updateMicButton();
             updateStatus();
+            console.log('UI updated - mic button and status should reflect:', isListening ? 'LISTENING' : 'PAUSED');
         }
 
         if (data.queue_size !== undefined) {
