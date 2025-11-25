@@ -70,18 +70,10 @@ window.addEventListener('keydown', (e) => {
         return;
     }
     
-    // Ctrl+Space (or Cmd+Space) as alternative - more reliable than F9
-    if (e.key === ' ' && modifierKey) {
+    // Cmd+Shift+R (or Ctrl+Shift+R) as alternative to Cmd+R
+    if (e.key === 'r' && modifierKey && e.shiftKey) {
         e.preventDefault();
-        showHotkeyFeedback(isMac ? '⌘Space' : 'Ctrl+Space');
-        toggleListening();
-        return;
-    }
-    
-    // Try to catch F9 with multiple key checks (F9 can be tricky)
-    if (e.key === 'F9' || e.keyCode === 120 || e.code === 'F9') {
-        e.preventDefault();
-        showHotkeyFeedback('F9');
+        showHotkeyFeedback(isMac ? '⌘⇧R' : 'Ctrl+Shift+R');
         toggleListening();
         return;
     }
@@ -243,7 +235,7 @@ function updateMicButton() {
     const icon = isListening ? 'mic' : 'mic-off';
     micBtn.innerHTML = `<i data-lucide="${icon}"></i>`;
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const hotkey = isMac ? '⌘R or ⌘Space' : 'Ctrl+R or Ctrl+Space';
+    const hotkey = isMac ? '⌘R or ⌘⇧R' : 'Ctrl+R or Ctrl+Shift+R';
     micBtn.title = isListening ? `Stop Recording (${hotkey})` : `Start Recording (${hotkey})`;
     micBtn.style.color = isListening ? '#ff4444' : 'inherit'; // Red when recording
     lucide.createIcons();

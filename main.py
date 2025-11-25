@@ -30,7 +30,7 @@ class OpenWhisperApp(rumps.App):
         self.menu = [
             rumps.MenuItem("Open Window", callback=self.open_window),
             rumps.separator,
-            rumps.MenuItem("Toggle Recording (F9)", callback=None),
+            rumps.MenuItem("Toggle Recording (⌘R or ⌘⇧R)", callback=None),
             rumps.MenuItem("Paste Transcripts (⌘⇧V)", callback=self.paste_transcripts),
             rumps.separator,
             rumps.MenuItem("Quit Open Whisper", callback=self.quit_app)

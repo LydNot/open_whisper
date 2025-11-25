@@ -46,7 +46,7 @@ class TranscriptionService:
         self.config: Dict[str, Any] = load_config()
         self.running: bool = False
         self.listening: bool = False  # Default to not recording
-        self.manual_recording: bool = False  # Track if manually recording (F9 mode)
+        self.manual_recording: bool = False  # Track if manually recording (Cmd+R or Cmd+Shift+R mode)
         
         # Communication queues
         self.queue: queue.Queue = queue.Queue()  # WebSocket queue (high priority: text, status)
@@ -109,8 +109,8 @@ class TranscriptionService:
         if self.hotkey_listener:
             self.hotkey_listener.stop()
 
-    def _start_hotkey_listener(self):
-        """Start global hotkey listener for Cmd+Shift+V, Cmd+R, and F9"""
+    def _start_hotkey_listener(self) -> None:
+        """Start global hotkey listener for Cmd+Shift+V, Cmd+R, and Cmd+Shift+R."""
         def on_paste():
             """Paste transcripts when hotkey is pressed"""
             if self.transcripts:
@@ -135,7 +135,7 @@ class TranscriptionService:
                 self.buffer = np.zeros((0, 1))
                 subprocess.run([
                     'osascript', '-e',
-                    'display notification "Press Cmd+R or F9 to stop" with title "🎤 Recording Started" sound name "Tink"'
+                    'display notification "Press Cmd+R or Cmd+Shift+R to stop" with title "🎤 Recording Started" sound name "Tink"'
                 ])
             else:
                 # Process the entire recording when stopping
@@ -159,21 +159,21 @@ class TranscriptionService:
             on_toggle_recording
         )
 
-        record_hotkey_f9 = keyboard.HotKey(
-            keyboard.HotKey.parse('<f9>'),
+        record_hotkey_cmd_shift_r = keyboard.HotKey(
+            keyboard.HotKey.parse('<cmd>+<shift>+r'),
             on_toggle_recording
         )
 
-        def for_canonical(paste_fn, record_cmdr_fn, record_f9_fn):
+        def for_canonical(paste_fn, record_cmdr_fn, record_cmd_shift_r_fn):
             def handler(key):
                 paste_fn(key)
                 record_cmdr_fn(key)
-                record_f9_fn(key)
+                record_cmd_shift_r_fn(key)
             return handler
 
         hotkey_listener = keyboard.Listener(
-            on_press=for_canonical(paste_hotkey.press, record_hotkey_cmdr.press, record_hotkey_f9.press),
-            on_release=for_canonical(paste_hotkey.release, record_hotkey_cmdr.release, record_hotkey_f9.release)
+            on_press=for_canonical(paste_hotkey.press, record_hotkey_cmdr.press, record_hotkey_cmd_shift_r.press),
+            on_release=for_canonical(paste_hotkey.release, record_hotkey_cmdr.release, record_hotkey_cmd_shift_r.release)
         )
 
         hotkey_listener.start()
@@ -181,7 +181,7 @@ class TranscriptionService:
         print("Global hotkeys registered:")
         print("  Cmd+Shift+V - Paste transcripts")
         print("  Cmd+R - Toggle recording (auto-copies on stop)")
-        print("  F9 - Toggle recording (auto-copies on stop)")
+        print("  Cmd+Shift+R - Toggle recording (auto-copies on stop)")
             
     def _is_there_voice(self, indata: np.ndarray, frames: int, sample_rate: int) -> bool:
         """

@@ -50,7 +50,7 @@ Work anywhere on your Mac, even when the app is hidden:
 | Shortcut | Action |
 |----------|--------|
 | `Cmd+R` | **Toggle recording** on/off<br>Auto-copies transcript to clipboard when stopping |
-| `F9` | **Toggle recording** (alternative) |
+| `Cmd+Shift+R` | **Toggle recording** (alternative) |
 | `Cmd+Shift+V` | **Paste transcripts** at cursor location |
 
 **Setup Required:** See [ACCESSIBILITY.md](ACCESSIBILITY.md) for permission setup (2-minute one-time setup).

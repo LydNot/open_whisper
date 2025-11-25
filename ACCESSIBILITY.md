@@ -4,7 +4,7 @@
 
 Open Whisper uses global keyboard shortcuts that work even when the app is not focused. macOS requires **Accessibility** permissions for apps to:
 
-1. **Monitor keyboard input** - Detect when you press `Cmd+R`, `Cmd+Shift+V`, or `F9`
+1. **Monitor keyboard input** - Detect when you press `Cmd+R`, `Cmd+Shift+R`, or `Cmd+Shift+V`
 2. **Simulate keyboard events** - Paste text using `Cmd+V`
 
 ## What Files Need Permission
@@ -65,7 +65,7 @@ Click the **🔒 lock icon** at bottom left and enter your password
 
 **Option A: Let macOS prompt you (Easiest)**
 1. Start the app
-2. Press `Cmd+R`, `F9`, or `Cmd+Shift+V`
+2. Press `Cmd+R`, `Cmd+Shift+R`, or `Cmd+Shift+V`
 3. macOS shows permission dialog
 4. Click **"Open System Settings"**
 5. Toggle the permission **ON**
@@ -95,7 +95,7 @@ After granting permissions:
 1. Start the app
 2. You should **NOT** see: `"This process is not trusted!"`
 3. Test hotkeys:
-   - Press `Cmd+R` or `F9` → Should start/stop recording
+   - Press `Cmd+R` or `Cmd+Shift+R` → Should start/stop recording
    - Press `Cmd+Shift+V` → Should paste transcripts
 
 ## Troubleshooting
@@ -114,7 +114,7 @@ After granting permissions:
 
 The macOS Accessibility UI has changed. Instead:
 - Click the 🔒 lock first
-- Press `Cmd+R` or `F9` to trigger permission request
+- Press `Cmd+R` or `Cmd+Shift+R` to trigger permission request
 - macOS will show you what to add
 
 ### Multiple Python entries?
@@ -166,4 +166,4 @@ If you're uncomfortable granting permissions, you can:
 3. **Use in-app buttons** - Open window and click paste button
 4. **Manually copy** - Select text and `Cmd+C`
 
-Everything works except `Cmd+R`, `Cmd+Shift+V`, and `F9` global hotkeys.
+Everything works except `Cmd+R`, `Cmd+Shift+R`, and `Cmd+Shift+V` global hotkeys.
