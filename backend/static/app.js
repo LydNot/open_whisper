@@ -26,6 +26,7 @@ const volumeInput = document.getElementById('volume-input');
 const statusIndicator = document.getElementById('status');
 const queueStatusIndicator = document.getElementById('queue-status');
 const autoSaveToggle = document.getElementById('autosave-toggle');
+const autoPasteToggle = document.getElementById('autopaste-toggle');
 const maxChunkInput = document.getElementById('max-chunk-input');
 
 updateStatus();
@@ -50,6 +51,10 @@ maxChunkInput.addEventListener('change', (e) => updateConfig('max_chunk_duration
 autoSaveToggle.addEventListener('change', (e) => {
     autoSaveEnabled = e.target.checked;
     console.log('Auto-save:', autoSaveEnabled ? 'enabled' : 'disabled');
+});
+autoPasteToggle.addEventListener('change', (e) => {
+    updateConfig('auto_paste', e.target.checked);
+    console.log('Auto-paste:', e.target.checked ? 'enabled' : 'disabled');
 });
 
 // Keyboard hotkey listener
@@ -162,6 +167,7 @@ function renderConfig() {
     }
     if (config.silence_duration_ms) silenceInput.value = config.silence_duration_ms;
     if (config.max_chunk_duration_s) maxChunkInput.value = config.max_chunk_duration_s;
+    if (config.auto_paste !== undefined) autoPasteToggle.checked = config.auto_paste;
 }
 
 function updateThresholdMarker(threshold) {

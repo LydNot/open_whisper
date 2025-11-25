@@ -1,3 +1,5 @@
+"""Open Whisper menu bar application using rumps."""
+
 import threading
 import uvicorn
 import time
@@ -5,19 +7,24 @@ import rumps
 import webbrowser
 import os
 import sys
+from typing import Optional
 from backend.app import app as fastapi_app, service
+from backend.constants import DEFAULT_SERVER_PORT
 
-def start_server():
-    uvicorn.run(fastapi_app, port=8000, log_level="error")
+def start_server() -> None:
+    """Start the FastAPI server in a background thread."""
+    uvicorn.run(fastapi_app, host="localhost", port=DEFAULT_SERVER_PORT, log_level="error")
 
 class OpenWhisperApp(rumps.App):
-    def __init__(self):
-        # Use a simple emoji for the menu bar icon
+    """macOS menu bar application for Open Whisper."""
+    
+    def __init__(self) -> None:
+        """Initialize the menu bar application."""
         super(OpenWhisperApp, self).__init__("🎤", quit_button=None)
 
-        self.server_thread = None
-        self.window_opened = False
-        self.is_recording = False
+        self.server_thread: Optional[threading.Thread] = None
+        self.window_opened: bool = False
+        self.is_recording: bool = False
 
         # Menu items
         self.menu = [
@@ -29,19 +36,19 @@ class OpenWhisperApp(rumps.App):
             rumps.MenuItem("Quit Open Whisper", callback=self.quit_app)
         ]
     
-    def start_backend(self):
-        """Start FastAPI server in background thread"""
+    def start_backend(self) -> None:
+        """Start FastAPI server in background thread."""
         self.server_thread = threading.Thread(target=start_server, daemon=True)
         self.server_thread.start()
         time.sleep(1)  # Wait for server to start
 
-    def open_window(self, _):
-        """Open the interface in default browser"""
-        webbrowser.open('http://localhost:8000')
+    def open_window(self, _: rumps.MenuItem) -> None:
+        """Open the interface in default browser."""
+        webbrowser.open(f'http://localhost:{DEFAULT_SERVER_PORT}')
         self.window_opened = True
 
-    def paste_transcripts(self, _):
-        """Manually trigger paste (same as Cmd+Shift+V)"""
+    def paste_transcripts(self, _: rumps.MenuItem) -> None:
+        """Manually trigger paste (same as Cmd+Shift+V)."""
         if service.transcripts:
             import pyperclip
             import pyautogui
@@ -56,12 +63,12 @@ class OpenWhisperApp(rumps.App):
                 message="Start speaking to create transcripts"
             )
 
-    def quit_app(self, _):
-        """Quit the application"""
+    def quit_app(self, _: rumps.MenuItem) -> None:
+        """Quit the application."""
         rumps.quit_application()
 
-def check_single_instance():
-    """Ensure only one instance of Open Whisper is running"""
+def check_single_instance() -> None:
+    """Ensure only one instance of Open Whisper is running."""
     pid_file = os.path.expanduser('~/.open_whisper.pid')
     
     # Check if PID file exists
@@ -75,7 +82,7 @@ def check_single_instance():
                 os.kill(old_pid, 0)  # Signal 0 just checks if process exists
                 print(f"Open Whisper is already running (PID: {old_pid})")
                 print("Opening window...")
-                webbrowser.open('http://localhost:8000')
+                webbrowser.open(f'http://localhost:{DEFAULT_SERVER_PORT}')
                 sys.exit(0)
             except OSError:
                 # Process is not running, remove stale PID file

@@ -1,15 +1,19 @@
 # Open Whisper 🎤
 
-Real-time speech-to-text desktop application powered by OpenAI Whisper.
+**Real-time speech-to-text desktop application powered by OpenAI Whisper.**
 
-## Features
+100% local, private, and free forever. No cloud dependencies, no subscriptions.
 
-- 🎙️ **Real-time transcription** with Voice Activity Detection
+## ✨ Features
+
+- 🎙️ **Real-time transcription** with Voice Activity Detection (VAD)
 - ⌨️ **Global keyboard shortcuts** (work anywhere, even when app is hidden)
-- 📋 **Auto-copy to clipboard** when stopping recording
-- 📊 **Queue status monitoring** with detailed metrics
-- 📈 **Live audio visualizer** with threshold indicator
-- ⚙️ **Configurable settings** (model, language, thresholds)
+- 📋 **Auto-paste to editor** - transcripts automatically appear where you're typing
+- 📝 **Auto-save transcripts** - separate JSONL files for each transcription
+- 📊 **Queue monitoring** with detailed metrics and processing stats
+- 📈 **Live audio visualizer** with configurable threshold indicator
+- 🎯 **File drag-and-drop** - transcribe existing audio files (MP3, WAV, M4A, etc.)
+- ⚙️ **Fully configurable** - model, language, thresholds, and behavior
 
 ## Two Versions Available
 
@@ -156,21 +160,32 @@ Make sure:
 
 See [plan.md](plan.md) for complete architecture.
 
-## Files Overview
+## 📁 Project Structure
 
 ```
 ├── start_app.sh          # Start menu bar version
-├── start_desktop.sh      # Start desktop window version
+├── start_desktop.sh      # Start desktop window version (recommended)
 ├── main.py               # Menu bar app entry point
 ├── main_desktop.py       # Desktop window entry point
 ├── config.json           # Your settings (auto-generated)
 ├── ACCESSIBILITY.md      # Accessibility permissions guide
 ├── backend/
-│   ├── app.py           # FastAPI server
-│   ├── service.py       # Transcription service
+│   ├── app.py           # FastAPI server with API endpoints
+│   ├── service.py       # Core transcription service
+│   ├── config.py        # Configuration management
+│   ├── constants.py     # Application constants
 │   └── static/          # Web interface (HTML/CSS/JS)
-└── transcripts/         # Saved transcripts (auto-generated)
+└── transcripts/         # Saved transcripts (auto-generated JSONL files)
 ```
+
+## 🏗️ Code Quality
+
+- ✅ Full type hints throughout the codebase
+- ✅ Comprehensive docstrings for all functions
+- ✅ Centralized constants (no magic numbers)
+- ✅ Clean separation of concerns
+- ✅ Well-documented API endpoints
+- ✅ Zero linter errors
 
 ## License
 

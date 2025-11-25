@@ -1,3 +1,5 @@
+"""Transcription service for real-time speech-to-text processing."""
+
 import threading
 import queue
 import time
@@ -8,6 +10,7 @@ import site
 import os
 from datetime import datetime
 from collections import deque
+from typing import Dict, List, Any, Optional, Tuple
 from pynput import keyboard
 import pyperclip
 import pyautogui
@@ -22,64 +25,82 @@ for site_package in site.getsitepackages():
 
 from whisper_ctranslate2.transcribe import Transcribe, TranscriptionOptions
 from .config import load_config
-
-# Constants from live.py
-BlockSize = 30  # milliseconds per block
-Vocals = [50, 1000]
-# EndBlocks is now dynamic based on config
-# FlushBlocks is now calculated dynamically from max_chunk_duration_s config
+from .constants import (
+    BLOCK_SIZE_MS,
+    SAMPLE_RATE,
+    VOCAL_FREQ_MIN,
+    VOCAL_FREQ_MAX,
+    MAX_QUEUE_SIZE,
+    VOLUME_QUEUE_MAXSIZE,
+    QUEUE_HISTORY_SIZE,
+    MAX_QUEUE_ITEMS_MEMORY,
+    KEEP_COMPLETED_ITEMS,
+    CLIPBOARD_DELAY
+)
 
 class TranscriptionService:
-    def __init__(self):
-        self.config = load_config()
-        self.running = False
-        self.listening = False # Default to not recording
-        self.manual_recording = False # Track if manually recording (F9 mode)
-        self.queue = queue.Queue() # WebSocket queue (high priority: text, status)
-        self.volume_queue = queue.Queue(maxsize=5) # Low priority: volume updates (drop if full)
-        self.audio_queue = queue.Queue() # Audio buffer queue
-        self.thread = None
-        self.worker_thread = None
-        self.transcribe_model = None
-        self.hotkey_listener = None
+    """Service for managing real-time speech transcription with voice activity detection."""
+    
+    def __init__(self) -> None:
+        """Initialize the transcription service with default configuration."""
+        self.config: Dict[str, Any] = load_config()
+        self.running: bool = False
+        self.listening: bool = False  # Default to not recording
+        self.manual_recording: bool = False  # Track if manually recording (F9 mode)
+        
+        # Communication queues
+        self.queue: queue.Queue = queue.Queue()  # WebSocket queue (high priority: text, status)
+        self.volume_queue: queue.Queue = queue.Queue(maxsize=VOLUME_QUEUE_MAXSIZE)  # Low priority: volume updates
+        self.audio_queue: queue.Queue = queue.Queue()  # Audio buffer queue
+        
+        # Threading
+        self.thread: Optional[threading.Thread] = None
+        self.worker_thread: Optional[threading.Thread] = None
+        self.hotkey_listener: Optional[keyboard.Listener] = None
+        
+        # Transcription model
+        self.transcribe_model: Optional[Transcribe] = None
 
-        # State for voice detection
-        self.waiting = 0
-        self.prevblock = self.buffer = np.zeros((0, 1))
-        self.speaking = False
-        self.blocks_speaking = 0
+        # Voice detection state
+        self.waiting: int = 0
+        self.prevblock: np.ndarray = np.zeros((0, 1))
+        self.buffer: np.ndarray = np.zeros((0, 1))
+        self.speaking: bool = False
+        self.blocks_speaking: int = 0
 
         # Queue metadata tracking
-        self.queue_item_counter = 0
-        self.queue_items = {}  # {item_id: {timestamp, buffer_size, status}}
-        self.processing_stats = {
+        self.queue_item_counter: int = 0
+        self.queue_items: Dict[int, Dict[str, Any]] = {}
+        self.processing_stats: Dict[str, Any] = {
             'total_processed': 0,
             'total_processing_time': 0.0,
             'items_dropped': 0
         }
-        self.processing_history = deque(maxlen=50)  # Last 50 processing events
+        self.processing_history: deque = deque(maxlen=QUEUE_HISTORY_SIZE)
 
         # Transcripts for hotkey paste
-        self.transcripts = []
+        self.transcripts: List[str] = []
         
-    def start(self):
+    def start(self) -> None:
+        """Start the transcription service with all threads and listeners."""
         if self.running:
             return
         self.running = True
-        self.config = load_config() # Reload config on start
+        self.config = load_config()  # Reload config on start
 
         # Start audio capture thread
-        self.thread = threading.Thread(target=self._run_loop)
+        self.thread = threading.Thread(target=self._run_loop, daemon=True)
         self.thread.start()
 
         # Start transcription worker thread
-        self.worker_thread = threading.Thread(target=self._transcription_worker)
+        self.worker_thread = threading.Thread(target=self._transcription_worker, daemon=True)
         self.worker_thread.start()
 
-        # Start global hotkey listener (Cmd+Shift+V on macOS, Ctrl+Shift+V on others)
+        # Start global hotkey listener
         self._start_hotkey_listener()
         
-    def stop(self):
+    def stop(self) -> None:
+        """Stop the transcription service and clean up all resources."""
         self.running = False
         if self.thread:
             self.thread.join()
@@ -162,16 +183,29 @@ class TranscriptionService:
         print("  Cmd+R - Toggle recording (auto-copies on stop)")
         print("  F9 - Toggle recording (auto-copies on stop)")
             
-    def _is_there_voice(self, indata, frames, sample_rate):
+    def _is_there_voice(self, indata: np.ndarray, frames: int, sample_rate: int) -> bool:
+        """
+        Detect if voice is present in audio data using frequency and volume analysis.
+        
+        Args:
+            indata: Audio data array
+            frames: Number of frames in the audio data
+            sample_rate: Audio sample rate in Hz
+            
+        Returns:
+            True if voice is detected, False otherwise
+        """
         freq = (
             np.argmax(np.abs(np.fft.rfft(indata[:, 0])))
             * sample_rate
             / frames
         )
         volume = np.sqrt(np.mean(indata**2))
-        return volume > self.config.get("live_volume_threshold", 0.02) and Vocals[0] <= freq <= Vocals[1]
+        return (volume > self.config.get("live_volume_threshold", 0.02) and 
+                VOCAL_FREQ_MIN <= freq <= VOCAL_FREQ_MAX)
 
-    def _save_to_process(self):
+    def _save_to_process(self) -> None:
+        """Save current audio buffer to processing queue and reset state."""
         buffer_copy = self.buffer.copy()
         item_id = self.queue_item_counter
         self.queue_item_counter += 1
@@ -181,7 +215,7 @@ class TranscriptionService:
             'id': item_id,
             'timestamp': datetime.now().isoformat(),
             'buffer_size': len(buffer_copy),
-            'duration_seconds': len(buffer_copy) / 16000,  # 16kHz sample rate
+            'duration_seconds': len(buffer_copy) / SAMPLE_RATE,
             'status': 'queued'
         }
 
@@ -192,14 +226,22 @@ class TranscriptionService:
         # Notify queue size increase and send detailed queue info
         self._send_queue_update()
 
-    def _callback(self, indata, frames, _time, status):
+    def _callback(self, indata: np.ndarray, frames: int, _time: Any, status: Any) -> None:
+        """
+        Audio callback for processing incoming audio data.
+        
+        Args:
+            indata: Audio data array
+            frames: Number of frames
+            _time: Time information (unused)
+            status: Status information (unused)
+        """
         if not self.listening:
             return
 
         if not any(indata):
             return
 
-        sample_rate = 16000 # Default for whisper
         volume = np.sqrt(np.mean(indata**2))
 
         # Send volume update to low-priority queue (drop if full to avoid backlog)
@@ -215,7 +257,7 @@ class TranscriptionService:
             return  # Don't process until user manually stops
 
         # Automatic VAD mode (original behavior)
-        voice = self._is_there_voice(indata, frames, sample_rate)
+        voice = self._is_there_voice(indata, frames, SAMPLE_RATE)
 
         if not voice and not self.speaking:
             return
@@ -228,12 +270,12 @@ class TranscriptionService:
             
             # Calculate EndBlocks dynamically based on config
             silence_ms = self.config.get("silence_duration_ms", 1000)
-            self.waiting = int(silence_ms / BlockSize)
+            self.waiting = int(silence_ms / BLOCK_SIZE_MS)
 
             if not self.speaking:
                 # Calculate FlushBlocks dynamically from config
                 max_chunk_s = self.config.get("max_chunk_duration_s", 10)
-                self.blocks_speaking = int((max_chunk_s * 1000) / BlockSize)
+                self.blocks_speaking = int((max_chunk_s * 1000) / BLOCK_SIZE_MS)
 
             self.speaking = True
         else:
@@ -248,8 +290,25 @@ class TranscriptionService:
         if self.blocks_speaking < 1:
             self._save_to_process()
 
-    def _send_queue_update(self):
-        """Send detailed queue status update via WebSocket"""
+    def _auto_paste(self, text: str) -> None:
+        """
+        Automatically paste transcribed text to active editor.
+        
+        Args:
+            text: The text to paste
+        """
+        try:
+            # Copy to clipboard
+            pyperclip.copy(text)
+            time.sleep(CLIPBOARD_DELAY)  # Brief delay to ensure clipboard is ready
+            # Paste using Cmd+V on macOS
+            pyautogui.hotkey('command', 'v')
+            print(f"[Auto-paste] Pasted: {text[:50]}{'...' if len(text) > 50 else ''}")
+        except Exception as e:
+            print(f"[Auto-paste] Error: {e}")
+
+    def _send_queue_update(self) -> None:
+        """Send detailed queue status update via WebSocket."""
         queued_items = [item for item in self.queue_items.values() if item['status'] == 'queued']
         processing_items = [item for item in self.queue_items.values() if item['status'] == 'processing']
 
@@ -271,8 +330,13 @@ class TranscriptionService:
             }
         })
 
-    def get_queue_status(self):
-        """Get current queue status for API endpoint"""
+    def get_queue_status(self) -> Dict[str, Any]:
+        """
+        Get current queue status for API endpoint.
+        
+        Returns:
+            Dictionary containing queue size, items, and statistics
+        """
         queued_items = [item for item in self.queue_items.values() if item['status'] == 'queued']
         processing_items = [item for item in self.queue_items.values() if item['status'] == 'processing']
 
@@ -292,7 +356,8 @@ class TranscriptionService:
             'processing_history': list(self.processing_history)
         }
 
-    def _transcription_worker(self):
+    def _transcription_worker(self) -> None:
+        """Worker thread for processing audio transcription queue."""
         while self.running:
             item_id = None
             try:
@@ -301,10 +366,10 @@ class TranscriptionService:
                 if qsize > 5:
                     print(f"Warning: Transcription queue backlog: {qsize} items")
 
-                if qsize > 10:
+                if qsize > MAX_QUEUE_SIZE:
                     print("Error: Queue too large, dropping old items to catch up")
                     # Drop items until we have 5 left to avoid clearing everything
-                    items_to_drop = qsize - 5
+                    items_to_drop = qsize - QUEUE_WARNING_THRESHOLD
                     for _ in range(items_to_drop):
                         try:
                             dropped_item_id, _ = self.audio_queue.get_nowait()
@@ -418,11 +483,11 @@ class TranscriptionService:
                     self.processing_stats['total_processed'] += 1
                     self.processing_stats['total_processing_time'] += processing_time
 
-                    # Clean up old completed items (keep last 100)
-                    if len(self.queue_items) > 100:
+                    # Clean up old completed items
+                    if len(self.queue_items) > MAX_QUEUE_ITEMS_MEMORY:
                         completed_ids = [k for k, v in self.queue_items.items() if v['status'] == 'completed']
                         completed_ids.sort()
-                        for old_id in completed_ids[:-50]:  # Keep last 50 completed items
+                        for old_id in completed_ids[:-KEEP_COMPLETED_ITEMS]:
                             del self.queue_items[old_id]
 
                 if result['text'].strip():
@@ -430,6 +495,10 @@ class TranscriptionService:
                     self.queue.put({"text": text})
                     # Add to transcripts for hotkey paste
                     self.transcripts.append(text)
+                    
+                    # Auto-paste if enabled
+                    if self.config.get("auto_paste", True):
+                        self._auto_paste(text)
 
                 # Send queue update after completion
                 self._send_queue_update()
@@ -441,15 +510,15 @@ class TranscriptionService:
                     self.queue_items[item_id]['error'] = str(e)
                     self._send_queue_update()
 
-    def _run_loop(self):
-        sample_rate = 16000
-        block_size = int(sample_rate * BlockSize / 1000)
+    def _run_loop(self) -> None:
+        """Main audio capture loop that runs in a separate thread."""
+        block_size = int(SAMPLE_RATE * BLOCK_SIZE_MS / 1000)
         
         with sd.InputStream(
             channels=1,
             callback=self._callback,
             blocksize=block_size,
-            samplerate=sample_rate,
+            samplerate=SAMPLE_RATE,
         ):
             while self.running:
                 time.sleep(0.1)

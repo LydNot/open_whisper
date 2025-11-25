@@ -1,10 +1,12 @@
+"""Configuration management for Open Whisper."""
+
 import json
 import os
 from typing import Dict, Any
 
 CONFIG_FILE = "config.json"
 
-DEFAULT_CONFIG = {
+DEFAULT_CONFIG: Dict[str, Any] = {
     "model": "turbo",
     "language": "en",
     "live_volume_threshold": 0.02,
@@ -16,10 +18,17 @@ DEFAULT_CONFIG = {
     "silence_duration_ms": 1000,
     "max_chunk_duration_s": 10,  # Maximum duration before forcing transcription
     "threads": 0,  # 0 = auto-detect optimal thread count based on CPU
-    "compute_type": "int8"  # int8 for speed, float16/float32 for higher accuracy (requires more resources)
+    "compute_type": "int8",  # int8 for speed, float16/float32 for higher accuracy
+    "auto_paste": True  # Automatically paste transcribed text into active editor
 }
 
 def load_config() -> Dict[str, Any]:
+    """
+    Load configuration from file or create default if not exists.
+    
+    Returns:
+        Configuration dictionary
+    """
     if not os.path.exists(CONFIG_FILE):
         save_config(DEFAULT_CONFIG)
         return DEFAULT_CONFIG
@@ -30,11 +39,24 @@ def load_config() -> Dict[str, Any]:
         except json.JSONDecodeError:
             return DEFAULT_CONFIG
 
-def save_config(config: Dict[str, Any]):
+def save_config(config: Dict[str, Any]) -> None:
+    """
+    Save configuration to file.
+    
+    Args:
+        config: Configuration dictionary to save
+    """
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=4)
 
-def update_config(key: str, value: Any):
+def update_config(key: str, value: Any) -> None:
+    """
+    Update a single configuration value.
+    
+    Args:
+        key: Configuration key to update
+        value: New value for the configuration key
+    """
     config = load_config()
     config[key] = value
     save_config(config)

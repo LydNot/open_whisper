@@ -26,3 +26,4 @@ echo "✓ Open Whisper background service uninstalled"
 echo "You can still run it manually with: ./start_app.sh"
 
 
+

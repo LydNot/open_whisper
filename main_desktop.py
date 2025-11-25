@@ -1,17 +1,20 @@
+"""Open Whisper desktop application using PyWebView."""
+
 import webview
 import threading
 import uvicorn
 import time
 from backend.app import app
+from backend.constants import DEFAULT_SERVER_PORT
 
-def start_server():
-    uvicorn.run(app, port=8000, log_level="error")
+def start_server() -> None:
+    """Start the FastAPI server in a background thread."""
+    uvicorn.run(app, host="localhost", port=DEFAULT_SERVER_PORT, log_level="error")
 
 if __name__ == '__main__':
     # Start FastAPI backend in a separate thread
-    t = threading.Thread(target=start_server)
-    t.daemon = True
-    t.start()
+    server_thread = threading.Thread(target=start_server, daemon=True)
+    server_thread.start()
 
     # Wait for server to start
     time.sleep(1)
@@ -19,7 +22,7 @@ if __name__ == '__main__':
     # Create desktop window with PyWebView
     webview.create_window(
         'Open Whisper',
-        'http://localhost:8000',
+        f'http://localhost:{DEFAULT_SERVER_PORT}',
         width=800,
         height=600
     )

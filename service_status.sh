@@ -48,3 +48,4 @@ echo "  Stop:          launchctl stop com.openwhisper"
 echo "  Uninstall:     ./uninstall_service.sh"
 
 
+

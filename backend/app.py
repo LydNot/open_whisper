@@ -1,5 +1,10 @@
+"""FastAPI application for Open Whisper transcription service."""
+
+from typing import List, Dict, Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import asyncio
 import json
@@ -11,39 +16,48 @@ import tempfile
 import numpy as np
 from datetime import datetime
 from .service import TranscriptionService
-from .config import load_config, save_config, update_config
+from .config import load_config, update_config
+from .constants import DEFAULT_SERVER_PORT, CLIPBOARD_DELAY
 
-app = FastAPI()
+app = FastAPI(title="Open Whisper", description="Real-time speech transcription service")
 
 class PasteRequest(BaseModel):
+    """Request model for pasting text."""
     text: str
 
+class SaveRequest(BaseModel):
+    """Request model for saving transcripts."""
+    transcripts: List[Dict[str, str]]
+
+class ConfigUpdate(BaseModel):
+    """Request model for updating configuration."""
+    key: str
+    value: str | int | float | bool
+
 @app.post("/paste")
-async def paste_to_cursor(request: PasteRequest):
-    # Copy to clipboard
+async def paste_to_cursor(request: PasteRequest) -> Dict[str, str]:
+    """
+    Paste text to the active cursor location.
+    
+    Args:
+        request: PasteRequest containing the text to paste
+        
+    Returns:
+        Status message
+    """
     pyperclip.copy(request.text)
-    
-    # Give focus back to the previous window (heuristic: wait a bit)
-    # In a real desktop app scenario, the window manager handles focus.
-    # With pywebview, we might need to minimize or hide, but for now let's just paste.
-    # The user will likely have the target window active if we use a global shortcut,
-    # but here we are clicking a button in the app.
-    # So the user has to click the button, then quickly switch? 
-    # No, the request is "Paste to Cursor". Ideally the app is a floating window or side panel.
-    # Or, we hide the app window momentarily?
-    # Let's just simulate the paste command.
-    
-    # Wait a tiny bit to ensure clipboard is ready
-    time.sleep(0.1)
-    
-    # Simulate Cmd+V (Mac) or Ctrl+V (Windows/Linux)
-    # Since user is on Mac (from system info):
-    pyautogui.hotkey('command', 'v')
-    
+    time.sleep(CLIPBOARD_DELAY)  # Ensure clipboard is ready
+    pyautogui.hotkey('command', 'v')  # macOS paste command
     return {"status": "pasted"}
 
 @app.post("/toggle_listening")
-async def toggle_listening():
+async def toggle_listening() -> Dict[str, bool]:
+    """
+    Toggle the listening state of the transcription service.
+    
+    Returns:
+        Current listening state
+    """
     service.listening = not service.listening
     service.manual_recording = service.listening  # Enable manual mode for web UI too
     
@@ -57,11 +71,17 @@ async def toggle_listening():
     
     return {"listening": service.listening}
 
-class SaveRequest(BaseModel):
-    transcripts: list
-
 @app.post("/save_transcript")
-async def save_transcript(request: SaveRequest):
+async def save_transcript(request: SaveRequest) -> Dict[str, str]:
+    """
+    Save transcripts to a JSONL file.
+    
+    Args:
+        request: SaveRequest containing list of transcripts
+        
+    Returns:
+        Path to the saved file
+    """
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = f"transcript-{timestamp}.jsonl"
     
@@ -76,9 +96,6 @@ async def save_transcript(request: SaveRequest):
             f.write(json.dumps(t) + "\n")
             
     return {"path": filepath}
-
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
 app.add_middleware(
     CORSMiddleware,
@@ -96,24 +113,37 @@ async def read_root():
 
 service = TranscriptionService()
 
-class ConfigUpdate(BaseModel):
-    key: str
-    value: str | int | float | bool
-
 @app.on_event("startup")
-async def startup_event():
+async def startup_event() -> None:
+    """Initialize the transcription service on startup."""
     service.start()
 
 @app.on_event("shutdown")
-async def shutdown_event():
+async def shutdown_event() -> None:
+    """Clean up the transcription service on shutdown."""
     service.stop()
 
 @app.get("/config")
-async def get_config():
+async def get_config() -> Dict[str, Any]:
+    """
+    Get current configuration.
+    
+    Returns:
+        Configuration dictionary
+    """
     return load_config()
 
 @app.post("/config")
-async def set_config(update: ConfigUpdate):
+async def set_config(update: ConfigUpdate) -> Dict[str, str]:
+    """
+    Update configuration setting.
+    
+    Args:
+        update: ConfigUpdate containing key and value
+        
+    Returns:
+        Status message
+    """
     update_config(update.key, update.value)
     # Restart service to apply changes
     service.stop()
@@ -121,11 +151,29 @@ async def set_config(update: ConfigUpdate):
     return {"status": "updated"}
 
 @app.get("/queue_status")
-async def get_queue_status():
+async def get_queue_status() -> Dict[str, Any]:
+    """
+    Get current transcription queue status.
+    
+    Returns:
+        Queue status including size, items, and statistics
+    """
     return service.get_queue_status()
 
 @app.post("/transcribe_file")
-async def transcribe_file(file: UploadFile = File(...)):
+async def transcribe_file(file: UploadFile = File(...)) -> Dict[str, str]:
+    """
+    Transcribe an uploaded audio file.
+    
+    Args:
+        file: Audio file to transcribe
+        
+    Returns:
+        Transcribed text and filename
+        
+    Raises:
+        Exception: If transcription fails
+    """
     """Transcribe an uploaded audio file"""
     try:
         # Save uploaded file temporarily
@@ -212,7 +260,15 @@ async def transcribe_file(file: UploadFile = File(...)):
         raise Exception(f"Error transcribing file: {str(e)}")
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket) -> None:
+    """
+    WebSocket endpoint for real-time updates.
+    
+    Sends transcription results, volume levels, and queue status to clients.
+    
+    Args:
+        websocket: WebSocket connection
+    """
     await websocket.accept()
     try:
         while True:
