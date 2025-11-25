@@ -207,8 +207,8 @@ async def transcribe_file(file: UploadFile = File(...)) -> Dict[str, str]:
 
         from whisper_ctranslate2.transcribe import TranscriptionOptions
         options = TranscriptionOptions(
-            beam_size=5,
-            best_of=5,
+            beam_size=1,  # Reduced from 5 for speed (greedy decoding)
+            best_of=1,    # Reduced from 5 for speed
             patience=1,
             length_penalty=1,
             repetition_penalty=1,
@@ -216,7 +216,7 @@ async def transcribe_file(file: UploadFile = File(...)) -> Dict[str, str]:
             log_prob_threshold=-1.0,
             no_speech_threshold=0.6,
             compression_ratio_threshold=2.4,
-            condition_on_previous_text=True,
+            condition_on_previous_text=False,  # Disabled for speed
             prompt_reset_on_temperature=0.5,
             initial_prompt=None,
             prefix=None,
