@@ -132,6 +132,12 @@ class TranscriptionService:
                 status = "Recording started" if self.listening else "Recording stopped"
                 print(f"[Hotkey] {status} (Manual mode)")
                 
+                # Send status update to UI via WebSocket
+                if self.listening:
+                    self.queue.put({"status": "Listening...", "listening": True})
+                else:
+                    self.queue.put({"status": "Processing...", "listening": False})
+                
                 # Show macOS notification
                 import subprocess
                 if self.listening:

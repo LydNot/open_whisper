@@ -124,6 +124,13 @@ function connectWebSocket() {
         } else if (data.status) {
             updateStatus(data.status);
         }
+        
+        // Handle listening state changes from hotkey
+        if (data.listening !== undefined) {
+            isListening = data.listening;
+            updateMicButton();
+            updateStatus();
+        }
 
         if (data.queue_size !== undefined) {
             updateQueueStatus(data.queue_size);
