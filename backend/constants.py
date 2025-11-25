@@ -25,3 +25,4 @@ DEFAULT_SERVER_PORT = 8000
 # Paste operation timing
 CLIPBOARD_DELAY = 0.1  # seconds to wait after copying to clipboard
 
+
